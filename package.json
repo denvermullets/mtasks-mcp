@@ -1,0 +1,25 @@
+{
+  "name": "mtasks-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for the mtasks issue tracker",
+  "type": "module",
+  "bin": {
+    "mtasks-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
