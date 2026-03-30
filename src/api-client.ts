@@ -1,27 +1,33 @@
-const apiUrl = process.env.MTASKS_API_URL;
-const apiToken = process.env.MTASKS_API_TOKEN;
-
-if (!apiUrl || !apiToken) {
-  throw new Error(
-    "Missing required environment variables: MTASKS_API_URL and MTASKS_API_TOKEN must be set"
-  );
-}
-
-const BASE_URL = apiUrl.replace(/\/$/, "");
-
 interface RequestOptions {
   method?: string;
   body?: Record<string, unknown>;
   params?: Record<string, string | number | undefined>;
 }
 
+function getConfig() {
+  const apiUrl = process.env.MTASKS_API_URL;
+  const apiToken = process.env.MTASKS_API_TOKEN;
+
+  if (!apiUrl || !apiToken) {
+    throw new Error(
+      "Missing required environment variables: MTASKS_API_URL and MTASKS_API_TOKEN must be set"
+    );
+  }
+
+  return {
+    baseUrl: apiUrl.replace(/\/$/, ""),
+    token: apiToken,
+  };
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
+  const { baseUrl, token } = getConfig();
   const { method = "GET", body, params } = options;
 
-  const url = new URL(`${BASE_URL}${path}`);
+  const url = new URL(`${baseUrl}${path}`);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined) {
@@ -31,7 +37,7 @@ export async function apiRequest<T>(
   }
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiToken}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     Accept: "application/json",
   };
