@@ -70,3 +70,29 @@ just have to remember to put
     }
   }
 ```
+
+---
+
+## Release / publish notes (for maintainer)
+
+Publishing a new version to npm. `npm version <type>` bumps `package.json`, commits, and tags in one shot — use it after merging to `main` so the tag points at the merge commit.
+
+```bash
+# from main, after your PR is merged
+git checkout main && git pull
+
+npm version patch   # 1.0.1 → 1.0.2  (bug fixes)
+npm version minor   # 1.0.1 → 1.1.0  (new features, backwards compatible)
+npm version major   # 1.0.1 → 2.0.0  (breaking changes)
+
+git push && git push --tags
+npm publish
+```
+
+If you hand-tagged already (`git tag v1.0.1`) and then `npm publish` fails with "cannot publish over previously published versions", it means you forgot to bump `package.json`. Either edit the version manually and commit, or drop the tag and use `npm version` as above.
+
+Verify after publish:
+```bash
+npm view @denvermullets/jait
+npx -y @denvermullets/jait@latest --help   # sanity check the bin still works
+```
