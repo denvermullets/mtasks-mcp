@@ -1,22 +1,3 @@
-```bash
-claude mcp add my-server -- node /absolute/path/to/your/dist/index.js
-```
-
-just have to remember to put
-
-```json
-  "mcpServers": {
-    "mtasks": {
-      "command": "node",
-      "args": ["BUILD_FILE_LOCATION"],
-      "env": {
-        "MTASKS_API_URL": "",
-        "MTASKS_API_TOKEN": ""
-      }
-    }
-  }
-```
-
 ## Install
 
 Install the published package from npm — no clone, no manual build.
@@ -66,3 +47,26 @@ Both defaults can be overridden with environment variables, mostly useful for po
 
 - `MTASKS_API_URL` — overrides the default production URL.
 - `MTASKS_API_TOKEN` — overrides the saved token from `jait login`.
+
+
+----
+
+#### old notes to remove later:
+```bash
+claude mcp add my-server -- node /absolute/path/to/your/dist/index.js
+```
+
+just have to remember to put
+
+```json
+  "mcpServers": {
+    "mtasks": {
+      "command": "node",
+      "args": ["BUILD_FILE_LOCATION"],
+      "env": {
+        "MTASKS_API_URL": "",
+        "MTASKS_API_TOKEN": ""
+      }
+    }
+  }
+```
