@@ -1,15 +1,20 @@
 {
-  "name": "mtasks-mcp-server",
+  "name": "@denvermullets/jait",
   "version": "1.0.0",
-  "description": "MCP server for the mtasks issue tracker",
+  "description": "MCP server for Just Another Issue Tracker",
   "type": "module",
   "bin": {
-    "mtasks-mcp-server": "./dist/index.js"
+    "jait": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepack": "yarn build",
+    "prepublishOnly": "yarn build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -21,5 +26,25 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "author": "denvermullets",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/denvermullets/mtasks-mcp.git"
+  },
+  "homepage": "https://github.com/denvermullets/mtasks-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/denvermullets/mtasks-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mtasks",
+    "jait",
+    "model-context-protocol",
+    "claude"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
