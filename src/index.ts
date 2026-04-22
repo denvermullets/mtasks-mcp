@@ -8,6 +8,7 @@ import { registerLaneTools } from "./tools/lanes.js";
 import { registerMemberTools } from "./tools/members.js";
 import { registerLabelTools } from "./tools/labels.js";
 import { registerProjectTools } from "./tools/projects.js";
+import { registerIssueDependencyTools } from "./tools/issue-dependencies.js";
 
 const server = new McpServer({
   name: "mtasks",
@@ -16,6 +17,7 @@ const server = new McpServer({
 
 registerTeamTools(server);
 registerIssueTools(server);
+registerIssueDependencyTools(server);
 registerLaneTools(server);
 registerMemberTools(server);
 registerLabelTools(server);

@@ -28,6 +28,8 @@ interface Issue {
   labels: { id: number; name: string }[];
   milestone?: { id: number; name: string } | null;
   parent_issue?: { id: number; identifier: string; title: string } | null;
+  blocking_issues?: { id: number; identifier: string; title: string }[];
+  blocked_issues?: { id: number; identifier: string; title: string }[];
   started_at: string | null;
   completed_at: string | null;
   canceled_at: string | null;
@@ -52,6 +54,14 @@ function formatIssue(issue: Issue, detailed = false): string {
     if (issue.parent_issue)
       lines.push(
         `  Parent: ${issue.parent_issue.identifier} — ${issue.parent_issue.title}`
+      );
+    if (issue.blocking_issues && issue.blocking_issues.length > 0)
+      lines.push(
+        `  Blocking: ${issue.blocking_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
+      );
+    if (issue.blocked_issues && issue.blocked_issues.length > 0)
+      lines.push(
+        `  Blocked by: ${issue.blocked_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
       );
     lines.push(`  Creator: ${issue.creator.name}`);
     lines.push(`  Created: ${issue.created_at}`);
