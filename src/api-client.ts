@@ -1,3 +1,7 @@
+import { readToken } from "./config-store.js";
+
+const DEFAULT_API_URL = "https://justanotherissuetracker.com";
+
 interface RequestOptions {
   method?: string;
   body?: Record<string, unknown>;
@@ -5,12 +9,12 @@ interface RequestOptions {
 }
 
 function getConfig() {
-  const apiUrl = process.env.MTASKS_API_URL;
-  const apiToken = process.env.MTASKS_API_TOKEN;
+  const apiUrl = process.env.MTASKS_API_URL || DEFAULT_API_URL;
+  const apiToken = process.env.MTASKS_API_TOKEN || readToken();
 
-  if (!apiUrl || !apiToken) {
+  if (!apiToken) {
     throw new Error(
-      "Missing required environment variables: MTASKS_API_URL and MTASKS_API_TOKEN must be set"
+      "No token found. Run 'npx @denvermullets/jait login <token>' or set MTASKS_API_TOKEN."
     );
   }
 
