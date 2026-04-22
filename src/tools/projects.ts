@@ -10,6 +10,12 @@ const priorityEnum = z
   .enum(["urgent", "high", "medium", "low", "no_priority"])
   .describe("Priority level");
 
+const roadmapCommitmentEnum = z
+  .enum(["now", "next", "later"])
+  .describe(
+    'Roadmap commitment lane: "now" (shipping in ~6 weeks), "next" (up after Now), "later" (on the radar). Omit to leave unchanged; pass null to remove from roadmap.'
+  );
+
 interface Project {
   id: number;
   name: string;
@@ -22,6 +28,7 @@ interface Project {
   milestone: { id: number; name: string } | null;
   labels: { id: number; name: string }[];
   issues_count: number;
+  roadmap_commitment: "now" | "next" | "later" | null;
   created_at: string;
   updated_at: string;
 }
@@ -35,6 +42,8 @@ function formatProject(project: Project, detailed = false): string {
   if (project.description) lines.push(`  Description: ${project.description}`);
   if (project.start_date) lines.push(`  Start: ${project.start_date}`);
   if (project.due_date) lines.push(`  Due: ${project.due_date}`);
+  if (project.roadmap_commitment)
+    lines.push(`  Roadmap: ${project.roadmap_commitment}`);
   if (detailed) {
     if (project.milestone) lines.push(`  Milestone: ${project.milestone.name}`);
     if (project.labels?.length > 0)
@@ -102,6 +111,7 @@ export function registerProjectTools(server: McpServer) {
         .optional()
         .describe("Due date in YYYY-MM-DD format"),
       label_ids: z.array(z.number()).optional().describe("Label IDs"),
+      roadmap_commitment: roadmapCommitmentEnum.optional(),
     },
     async ({
       team_id,
@@ -114,6 +124,7 @@ export function registerProjectTools(server: McpServer) {
       start_date,
       due_date,
       label_ids,
+      roadmap_commitment,
     }) => {
       const project = await apiRequest<Project>(
         `/api/v1/teams/${team_id}/projects`,
@@ -130,6 +141,7 @@ export function registerProjectTools(server: McpServer) {
               start_date,
               due_date,
               label_ids,
+              roadmap_commitment,
             },
           },
         }
@@ -166,6 +178,7 @@ export function registerProjectTools(server: McpServer) {
         .optional()
         .describe("Due date in YYYY-MM-DD format"),
       label_ids: z.array(z.number()).optional().describe("Set label IDs"),
+      roadmap_commitment: roadmapCommitmentEnum.nullable().optional(),
     },
     async ({
       team_id,
@@ -179,6 +192,7 @@ export function registerProjectTools(server: McpServer) {
       start_date,
       due_date,
       label_ids,
+      roadmap_commitment,
     }) => {
       const fields: Record<string, unknown> = {};
       if (name !== undefined) fields.name = name;
@@ -190,6 +204,8 @@ export function registerProjectTools(server: McpServer) {
       if (start_date !== undefined) fields.start_date = start_date;
       if (due_date !== undefined) fields.due_date = due_date;
       if (label_ids !== undefined) fields.label_ids = label_ids;
+      if (roadmap_commitment !== undefined)
+        fields.roadmap_commitment = roadmap_commitment;
 
       const project = await apiRequest<Project>(
         `/api/v1/teams/${team_id}/projects/${project_id}`,
