@@ -17,7 +17,13 @@ This writes the token to `~/.config/jait/config.json` (mode `0600`) so it doesn'
 **Claude Code (recommended):**
 
 ```bash
+# just in 1 project
 claude mcp add jait -- npx -y @denvermullets/jait
+```
+
+```bash
+# globally
+claude mcp add -s user jait -- npx -y @denvermullets/jait
 ```
 
 **Claude Desktop / Cursor / other clients:**
