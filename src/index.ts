@@ -9,6 +9,7 @@ import { registerMemberTools } from "./tools/members.js";
 import { registerLabelTools } from "./tools/labels.js";
 import { registerProjectTools } from "./tools/projects.js";
 import { registerIssueDependencyTools } from "./tools/issue-dependencies.js";
+import { registerCommentTools } from "./tools/comments.js";
 import { writeToken, clearToken } from "./config-store.js";
 
 const [, , cmd, arg] = process.argv;
@@ -37,6 +38,7 @@ const server = new McpServer({
 registerTeamTools(server);
 registerIssueTools(server);
 registerIssueDependencyTools(server);
+registerCommentTools(server);
 registerLaneTools(server);
 registerMemberTools(server);
 registerLabelTools(server);
