@@ -28,8 +28,18 @@ interface Issue {
   labels: { id: number; name: string }[];
   milestone?: { id: number; name: string } | null;
   parent_issue?: { id: number; identifier: string; title: string } | null;
-  blocking_issues?: { id: number; identifier: string; title: string }[];
-  blocked_issues?: { id: number; identifier: string; title: string }[];
+  blocking_issues?: {
+    id: number;
+    identifier: string;
+    title: string;
+    dependency_id: number;
+  }[];
+  blocked_issues?: {
+    id: number;
+    identifier: string;
+    title: string;
+    dependency_id: number;
+  }[];
   started_at: string | null;
   completed_at: string | null;
   canceled_at: string | null;
@@ -58,13 +68,15 @@ export function formatIssue(issue: Issue, detailed = false): string {
     // API semantics (from the Rails issue serializer / associations):
     //   blocked_issues  = issues THIS issue blocks (its dependents) -> "Blocking:"
     //   blocking_issues = issues that block THIS issue (its blockers) -> "Blocked by:"
+    // Each entry includes [dep #N], the IssueDependency record id, which is the
+    // dependency_id required by remove_issue_dependency.
     if (issue.blocked_issues && issue.blocked_issues.length > 0)
       lines.push(
-        `  Blocking: ${issue.blocked_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
+        `  Blocking: ${issue.blocked_issues.map((i) => `${i.identifier} (${i.title}) [dep #${i.dependency_id}]`).join(", ")}`
       );
     if (issue.blocking_issues && issue.blocking_issues.length > 0)
       lines.push(
-        `  Blocked by: ${issue.blocking_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
+        `  Blocked by: ${issue.blocking_issues.map((i) => `${i.identifier} (${i.title}) [dep #${i.dependency_id}]`).join(", ")}`
       );
     lines.push(`  Creator: ${issue.creator.name}`);
     lines.push(`  Created: ${issue.created_at}`);

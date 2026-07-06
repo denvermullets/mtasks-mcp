@@ -65,5 +65,14 @@ export async function apiRequest<T>(
     throw new Error(`API error ${response.status}: ${message}`);
   }
 
-  return response.json() as Promise<T>;
+  // Some endpoints (e.g. a 204 No Content on DELETE) return an empty body.
+  // Guard against JSON.parse throwing "Unexpected end of JSON input".
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const text = await response.text();
+  if (!text) {
+    return undefined as T;
+  }
+  return JSON.parse(text) as T;
 }

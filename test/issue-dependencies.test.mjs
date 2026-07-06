@@ -12,10 +12,10 @@ import { formatIssue } from "../dist/tools/issues.js";
 // Mirrors app/controllers/api/v1/issue_dependencies_controller.rb#create:
 //   direction 'blocked_by' => the SOURCE issue is blocked by the TARGET
 //   direction 'blocking'   => the SOURCE issue blocks the TARGET
-function storeDependency(source, target, direction) {
+function storeDependency(source, target, direction, id = 371) {
   return direction === "blocked_by"
-    ? { blocking_issue: target, blocked_issue: source }
-    : { blocking_issue: source, blocked_issue: target };
+    ? { id, blocking_issue: target, blocked_issue: source }
+    : { id, blocking_issue: source, blocked_issue: target };
 }
 
 // Mirrors app/models/issue.rb associations as rendered by the issue serializer:
@@ -26,10 +26,10 @@ function serializeIssue(issue, deps) {
     ...issue,
     blocking_issues: deps
       .filter((d) => d.blocked_issue.id === issue.id)
-      .map((d) => d.blocking_issue),
+      .map((d) => ({ ...d.blocking_issue, dependency_id: d.id })),
     blocked_issues: deps
       .filter((d) => d.blocking_issue.id === issue.id)
-      .map((d) => d.blocked_issue),
+      .map((d) => ({ ...d.blocked_issue, dependency_id: d.id })),
   });
 }
 
@@ -83,4 +83,16 @@ test("direction 'blocking': source blocks target", () => {
 
   assert.match(target, /Blocked by: DGHD-34/);
   assert.doesNotMatch(target, /Blocking: DGHD-34/);
+});
+
+test("get_issue surfaces the dependency record id as [dep #N]", () => {
+  // The dependency record id (not the issue id) is what remove_issue_dependency needs.
+  const dep = storeDependency(DGHD_34, DGHD_41, "blocking", 371);
+  const deps = [dep];
+
+  const source = formatIssue(serializeIssue(DGHD_34, deps), true);
+  const target = formatIssue(serializeIssue(DGHD_41, deps), true);
+
+  assert.match(source, /Blocking: DGHD-41 \(Day\/time cycle\) \[dep #371\]/);
+  assert.match(target, /Blocked by: DGHD-34 \(Crafting queue\) \[dep #371\]/);
 });

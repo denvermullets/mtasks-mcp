@@ -10,12 +10,46 @@ interface IssueSummary {
 
 interface IssueDependency {
   id: number;
+  direction?: "blocking" | "blocked_by";
   blocking_issue: IssueSummary;
   blocked_issue: IssueSummary;
   created_at: string;
 }
 
 export function registerIssueDependencyTools(server: McpServer) {
+  server.tool(
+    "list_issue_dependencies",
+    "List every dependency (blocking relationship) attached to an issue, including each dependency record's ID. Use this to find the dependency_id required by remove_issue_dependency.",
+    {
+      team_id: z.number().describe("Team ID"),
+      issue_id: z.number().describe("The issue ID whose dependencies to list"),
+    },
+    async ({ team_id, issue_id }) => {
+      const deps = await apiRequest<IssueDependency[]>(
+        `/api/v1/teams/${team_id}/issues/${issue_id}/issue_dependencies`
+      );
+      if (deps.length === 0) {
+        return {
+          content: [
+            { type: "text", text: "No dependencies found for this issue." },
+          ],
+        };
+      }
+      const text = deps
+        .map((dep) => {
+          const relation =
+            dep.direction === "blocked_by"
+              ? `blocked by ${dep.blocking_issue.identifier} (${dep.blocking_issue.title})`
+              : `blocking ${dep.blocked_issue.identifier} (${dep.blocked_issue.title})`;
+          return `[dep #${dep.id}] This issue is ${relation}`;
+        })
+        .join("\n");
+      return {
+        content: [{ type: "text", text }],
+      };
+    }
+  );
+
   server.tool(
     "create_issue_dependency",
     "Create a blocking relationship between two issues. Use direction 'blocking' to mark the issue as blocking the target, or 'blocked_by' to mark it as blocked by the target.",
