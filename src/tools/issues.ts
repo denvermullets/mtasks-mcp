@@ -37,7 +37,7 @@ interface Issue {
   updated_at: string;
 }
 
-function formatIssue(issue: Issue, detailed = false): string {
+export function formatIssue(issue: Issue, detailed = false): string {
   const lines = [
     `**${issue.identifier}**: ${issue.title}`,
     `  Status: ${issue.lane.name} | Priority: ${issue.priority} | ID: ${issue.id}`,
@@ -55,13 +55,16 @@ function formatIssue(issue: Issue, detailed = false): string {
       lines.push(
         `  Parent: ${issue.parent_issue.identifier} — ${issue.parent_issue.title}`
       );
-    if (issue.blocking_issues && issue.blocking_issues.length > 0)
-      lines.push(
-        `  Blocking: ${issue.blocking_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
-      );
+    // API semantics (from the Rails issue serializer / associations):
+    //   blocked_issues  = issues THIS issue blocks (its dependents) -> "Blocking:"
+    //   blocking_issues = issues that block THIS issue (its blockers) -> "Blocked by:"
     if (issue.blocked_issues && issue.blocked_issues.length > 0)
       lines.push(
-        `  Blocked by: ${issue.blocked_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
+        `  Blocking: ${issue.blocked_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
+      );
+    if (issue.blocking_issues && issue.blocking_issues.length > 0)
+      lines.push(
+        `  Blocked by: ${issue.blocking_issues.map((i) => `${i.identifier} (${i.title})`).join(", ")}`
       );
     lines.push(`  Creator: ${issue.creator.name}`);
     lines.push(`  Created: ${issue.created_at}`);
