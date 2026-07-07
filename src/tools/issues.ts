@@ -136,6 +136,35 @@ export function registerIssueTools(server: McpServer) {
   );
 
   server.tool(
+    "get_issue_by_identifier",
+    "Get full details of an issue by its shortcode/identifier (e.g. 'CMZ-324'). The team is inferred from the identifier prefix, so no team_id is needed.",
+    {
+      identifier: z
+        .string()
+        .describe("Issue shortcode, e.g. 'CMZ-324' (case-insensitive)"),
+    },
+    async ({ identifier }) => {
+      const normalized = identifier.trim().toUpperCase();
+      if (!/^[A-Z]+-\d+$/.test(normalized)) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error: '${identifier}' is not a valid issue identifier. Expected a shortcode like 'CMZ-324'.`,
+            },
+          ],
+        };
+      }
+      const issue = await apiRequest<Issue>(
+        `/api/v1/issues/by_identifier/${encodeURIComponent(normalized)}`
+      );
+      return {
+        content: [{ type: "text", text: formatIssue(issue, true) }],
+      };
+    }
+  );
+
+  server.tool(
     "create_issue",
     "Create a new issue on a team. If lane_id is omitted, defaults to the Backlog lane.",
     {
