@@ -5,6 +5,8 @@ const DEFAULT_API_URL = "https://justanotherissuetracker.com";
 interface RequestOptions {
   method?: string;
   body?: Record<string, unknown>;
+  // Sent as multipart/form-data instead of JSON (used for file uploads).
+  form?: FormData;
   params?: Record<string, string | number | undefined>;
 }
 
@@ -29,7 +31,7 @@ export async function apiRequest<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const { baseUrl, token } = getConfig();
-  const { method = "GET", body, params } = options;
+  const { method = "GET", body, form, params } = options;
 
   const url = new URL(`${baseUrl}${path}`);
   if (params) {
@@ -42,14 +44,15 @@ export async function apiRequest<T>(
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
     Accept: "application/json",
   };
+  // For multipart, fetch sets Content-Type itself so it can include the boundary.
+  if (!form) headers["Content-Type"] = "application/json";
 
   const response = await fetch(url.toString(), {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: form ?? (body ? JSON.stringify(body) : undefined),
   });
 
   if (!response.ok) {

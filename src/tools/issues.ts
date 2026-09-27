@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { apiRequest } from "../api-client.js";
+import {
+  type Attachment,
+  buildMultipart,
+  filePathsSchema,
+  formatAttachments,
+  readLocalFiles,
+} from "../attachments.js";
 
 const priorityEnum = z
   .enum(["urgent", "high", "medium", "low", "no_priority"])
@@ -26,6 +33,7 @@ interface Issue {
   creator: { id: number; name: string };
   project: { id: number; name: string } | null;
   labels: { id: number; name: string }[];
+  attachments?: Attachment[];
   milestone?: { id: number; name: string } | null;
   parent_issue?: { id: number; identifier: string; title: string } | null;
   blocking_issues?: {
@@ -60,6 +68,8 @@ export function formatIssue(issue: Issue, detailed = false): string {
   if (issue.estimate !== null) lines.push(`  Estimate: ${issue.estimate}`);
   if (detailed) {
     if (issue.description) lines.push(`  Description: ${issue.description}`);
+    if (issue.attachments && issue.attachments.length > 0)
+      lines.push(`  Attachments: ${formatAttachments(issue.attachments)}`);
     if (issue.milestone) lines.push(`  Milestone: ${issue.milestone.name}`);
     if (issue.parent_issue)
       lines.push(
@@ -86,6 +96,13 @@ export function formatIssue(issue: Issue, detailed = false): string {
     if (issue.canceled_at) lines.push(`  Canceled: ${issue.canceled_at}`);
   }
   return lines.join("\n");
+}
+
+// create/update respond with the summary serializer, which omits attachments,
+// so confirm what was uploaded from the request side.
+function attachedNote(files: { filename: string }[]): string {
+  if (files.length === 0) return "";
+  return `\n  Attached: ${files.map((f) => f.filename).join(", ")}`;
 }
 
 export function registerIssueTools(server: McpServer) {
@@ -186,6 +203,7 @@ export function registerIssueTools(server: McpServer) {
       estimate: z.number().optional().describe("Estimate value"),
       milestone_id: z.number().optional().describe("Milestone ID"),
       parent_issue_id: z.number().optional().describe("Parent issue ID"),
+      file_paths: filePathsSchema,
     },
     async ({
       team_id,
@@ -200,7 +218,10 @@ export function registerIssueTools(server: McpServer) {
       estimate,
       milestone_id,
       parent_issue_id,
+      file_paths,
     }) => {
+      const files = await readLocalFiles(file_paths ?? []);
+
       let resolvedLaneId = lane_id;
       if (!resolvedLaneId) {
         const lanes = await apiRequest<Lane[]>(
@@ -222,32 +243,30 @@ export function registerIssueTools(server: McpServer) {
         resolvedLaneId = backlog.id;
       }
 
+      const fields = {
+        title,
+        description,
+        priority: priority || "no_priority",
+        lane_id: resolvedLaneId,
+        assignee_id,
+        project_id,
+        label_ids,
+        due_date,
+        estimate,
+        milestone_id,
+        parent_issue_id,
+      };
       const issue = await apiRequest<Issue>(
         `/api/v1/teams/${team_id}/issues`,
-        {
-          method: "POST",
-          body: {
-            issue: {
-              title,
-              description,
-              priority: priority || "no_priority",
-              lane_id: resolvedLaneId,
-              assignee_id,
-              project_id,
-              label_ids,
-              due_date,
-              estimate,
-              milestone_id,
-              parent_issue_id,
-            },
-          },
-        }
+        files.length > 0
+          ? { method: "POST", form: buildMultipart("issue", fields, files) }
+          : { method: "POST", body: { issue: fields } }
       );
       return {
         content: [
           {
             type: "text",
-            text: `Issue created successfully:\n\n${formatIssue(issue, true)}`,
+            text: `Issue created successfully:\n\n${formatIssue(issue, true)}${attachedNote(files)}`,
           },
         ],
       };
@@ -269,6 +288,7 @@ export function registerIssueTools(server: McpServer) {
       label_ids: z.array(z.number()).optional().describe("Set label IDs"),
       due_date: z.string().optional().describe("Due date in YYYY-MM-DD format"),
       estimate: z.number().optional().describe("Estimate value"),
+      file_paths: filePathsSchema,
     },
     async ({
       team_id,
@@ -282,7 +302,9 @@ export function registerIssueTools(server: McpServer) {
       label_ids,
       due_date,
       estimate,
+      file_paths,
     }) => {
+      const files = await readLocalFiles(file_paths ?? []);
       const fields: Record<string, unknown> = {};
       if (title !== undefined) fields.title = title;
       if (description !== undefined) fields.description = description;
@@ -296,16 +318,15 @@ export function registerIssueTools(server: McpServer) {
 
       const issue = await apiRequest<Issue>(
         `/api/v1/teams/${team_id}/issues/${issue_id}`,
-        {
-          method: "PATCH",
-          body: { issue: fields },
-        }
+        files.length > 0
+          ? { method: "PATCH", form: buildMultipart("issue", fields, files) }
+          : { method: "PATCH", body: { issue: fields } }
       );
       return {
         content: [
           {
             type: "text",
-            text: `Issue updated successfully:\n\n${formatIssue(issue, true)}`,
+            text: `Issue updated successfully:\n\n${formatIssue(issue, true)}${attachedNote(files)}`,
           },
         ],
       };
