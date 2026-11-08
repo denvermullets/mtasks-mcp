@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { apiRequest } from "../api-client.js";
+import { apiRequest, apiRequestWithHeaders } from "../api-client.js";
+import {
+  type Attachment,
+  attachUploads,
+  filePathsSchema,
+  formatAttachments,
+  uploadLocalFiles,
+} from "../attachments.js";
+import { type ActivityEntry, formatActivityPage } from "./issues.js";
 
 const projectStatusEnum = z
   .enum(["backlog", "started", "paused", "completed", "cancelled"])
@@ -25,10 +33,10 @@ interface Project {
   lead: { id: number; name: string } | null;
   start_date: string | null;
   due_date: string | null;
-  milestone: { id: number; name: string } | null;
   labels: { id: number; name: string }[];
   issues_count: number;
   roadmap_commitment: "now" | "next" | "later" | null;
+  files?: Attachment[];
   created_at: string;
   updated_at: string;
 }
@@ -45,11 +53,12 @@ function formatProject(project: Project, detailed = false): string {
   if (project.roadmap_commitment)
     lines.push(`  Roadmap: ${project.roadmap_commitment}`);
   if (detailed) {
-    if (project.milestone) lines.push(`  Milestone: ${project.milestone.name}`);
     if (project.labels?.length > 0)
       lines.push(
         `  Labels: ${project.labels.map((l) => l.name).join(", ")}`
       );
+    if (project.files && project.files.length > 0)
+      lines.push(`  Attachments: ${formatAttachments(project.files)}`);
     if (project.issues_count !== undefined)
       lines.push(`  Issues: ${project.issues_count}`);
     lines.push(`  Created: ${project.created_at}`);
@@ -101,7 +110,6 @@ export function registerProjectTools(server: McpServer) {
       status: projectStatusEnum.optional().describe("Defaults to backlog"),
       priority: priorityEnum.optional().describe("Defaults to no_priority"),
       lead_id: z.number().optional().describe("Project lead user ID"),
-      milestone_id: z.number().optional().describe("Milestone ID"),
       start_date: z
         .string()
         .optional()
@@ -120,7 +128,6 @@ export function registerProjectTools(server: McpServer) {
       status,
       priority,
       lead_id,
-      milestone_id,
       start_date,
       due_date,
       label_ids,
@@ -137,7 +144,6 @@ export function registerProjectTools(server: McpServer) {
               status: status || "backlog",
               priority: priority || "no_priority",
               lead_id,
-              milestone_id,
               start_date,
               due_date,
               label_ids,
@@ -168,7 +174,6 @@ export function registerProjectTools(server: McpServer) {
       status: projectStatusEnum.optional(),
       priority: priorityEnum.optional(),
       lead_id: z.number().optional().describe("New lead user ID"),
-      milestone_id: z.number().optional().describe("Milestone ID"),
       start_date: z
         .string()
         .optional()
@@ -188,7 +193,6 @@ export function registerProjectTools(server: McpServer) {
       status,
       priority,
       lead_id,
-      milestone_id,
       start_date,
       due_date,
       label_ids,
@@ -200,7 +204,6 @@ export function registerProjectTools(server: McpServer) {
       if (status !== undefined) fields.status = status;
       if (priority !== undefined) fields.priority = priority;
       if (lead_id !== undefined) fields.lead_id = lead_id;
-      if (milestone_id !== undefined) fields.milestone_id = milestone_id;
       if (start_date !== undefined) fields.start_date = start_date;
       if (due_date !== undefined) fields.due_date = due_date;
       if (label_ids !== undefined) fields.label_ids = label_ids;
@@ -240,6 +243,90 @@ export function registerProjectTools(server: McpServer) {
       return {
         content: [
           { type: "text", text: `Project ${project_id} deleted successfully.` },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    "add_project_attachments",
+    "Attach local files to a project. Existing attachments are kept.",
+    {
+      team_id: z.number().describe("Team ID"),
+      project_id: z.number().describe("Project ID"),
+      file_paths: filePathsSchema.unwrap().min(1),
+    },
+    async ({ team_id, project_id, file_paths }) => {
+      const uploads = await uploadLocalFiles(file_paths);
+      const attached = await attachUploads(
+        `/api/v1/teams/${team_id}/projects/${project_id}/attachments`,
+        uploads
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Attached to project ${project_id}: ${formatAttachments(attached)}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    "remove_project_attachment",
+    "Remove a file attached to a project. Get the attachment ID from get_project.",
+    {
+      team_id: z.number().describe("Team ID"),
+      project_id: z.number().describe("Project ID"),
+      attachment_id: z.number().describe("Attachment ID (shown by get_project)"),
+    },
+    async ({ team_id, project_id, attachment_id }) => {
+      await apiRequest(
+        `/api/v1/teams/${team_id}/projects/${project_id}/attachments/${attachment_id}`,
+        { method: "DELETE" }
+      );
+      return {
+        content: [
+          { type: "text", text: `Attachment ${attachment_id} removed.` },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    "get_project_activity",
+    "Get a project's change history (name, description, status, priority, lead, dates, roadmap commitment), oldest first. Returns the newest `limit` entries; page back with before_id.",
+    {
+      team_id: z.number().describe("Team ID"),
+      project_id: z.number().describe("Project ID"),
+      since: z
+        .string()
+        .optional()
+        .describe("Only entries after this ISO 8601 timestamp"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(500)
+        .optional()
+        .describe("Max entries (default 100)"),
+      before_id: z
+        .string()
+        .optional()
+        .describe("Cursor from a previous call, to get older entries"),
+    },
+    async ({ team_id, project_id, since, limit, before_id }) => {
+      const { data, headers } = await apiRequestWithHeaders<ActivityEntry[]>(
+        `/api/v1/teams/${team_id}/projects/${project_id}/activity`,
+        { params: { since, limit, before_id } }
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: formatActivityPage(data, headers.get("X-Next-Before-Id")),
+          },
         ],
       };
     }

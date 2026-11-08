@@ -9,7 +9,11 @@ import { registerMemberTools } from "./tools/members.js";
 import { registerLabelTools } from "./tools/labels.js";
 import { registerProjectTools } from "./tools/projects.js";
 import { registerIssueDependencyTools } from "./tools/issue-dependencies.js";
+import { registerSubIssueTools } from "./tools/sub-issues.js";
 import { registerCommentTools } from "./tools/comments.js";
+import { registerDecisionTools } from "./tools/decisions.js";
+import { registerNotificationTools } from "./tools/notifications.js";
+import { registerRecurringIssueTools } from "./tools/recurring-issues.js";
 import { writeToken, clearToken } from "./config-store.js";
 
 const [, , cmd, arg] = process.argv;
@@ -38,11 +42,15 @@ const server = new McpServer({
 registerTeamTools(server);
 registerIssueTools(server);
 registerIssueDependencyTools(server);
+registerSubIssueTools(server);
 registerCommentTools(server);
 registerLaneTools(server);
 registerMemberTools(server);
 registerLabelTools(server);
 registerProjectTools(server);
+registerDecisionTools(server);
+registerNotificationTools(server);
+registerRecurringIssueTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

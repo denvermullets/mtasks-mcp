@@ -53,4 +53,56 @@ export function registerLabelTools(server: McpServer) {
       };
     }
   );
+
+  server.tool(
+    "update_label",
+    "Rename a label or change its color.",
+    {
+      team_id: z.number().describe("Team ID"),
+      label_id: z.number().describe("Label ID"),
+      name: z.string().optional().describe("New name (must be unique within team)"),
+      color: z.string().optional().describe("New hex color code (e.g. #ef4444)"),
+    },
+    async ({ team_id, label_id, name, color }) => {
+      const fields: Record<string, string> = {};
+      if (name !== undefined) fields.name = name;
+      if (color !== undefined) fields.color = color;
+      if (Object.keys(fields).length === 0) {
+        return {
+          content: [
+            { type: "text" as const, text: "Error: Give a name or a color to change." },
+          ],
+        };
+      }
+      const label = await apiRequest<Label>(
+        `/api/v1/teams/${team_id}/labels/${label_id}`,
+        { method: "PATCH", body: { label: fields } }
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Label updated: ${label.name} (${label.color}) — ID: ${label.id}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    "delete_label",
+    "Delete a label from a team. It is removed from every issue that carries it.",
+    {
+      team_id: z.number().describe("Team ID"),
+      label_id: z.number().describe("Label ID"),
+    },
+    async ({ team_id, label_id }) => {
+      await apiRequest(`/api/v1/teams/${team_id}/labels/${label_id}`, {
+        method: "DELETE",
+      });
+      return {
+        content: [{ type: "text", text: `Label ${label_id} deleted.` }],
+      };
+    }
+  );
 }

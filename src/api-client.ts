@@ -5,13 +5,10 @@ const DEFAULT_API_URL = "https://justanotherissuetracker.com";
 interface RequestOptions {
   method?: string;
   body?: Record<string, unknown>;
-  // Sent as multipart/form-data instead of JSON (used for file uploads).
-  form?: FormData;
   params?: Record<string, string | number | undefined>;
 }
 
 function getConfig() {
-  const apiUrl = process.env.MTASKS_API_URL || DEFAULT_API_URL;
   const apiToken = process.env.MTASKS_API_TOKEN || readToken();
 
   if (!apiToken) {
@@ -21,17 +18,30 @@ function getConfig() {
   }
 
   return {
-    baseUrl: apiUrl.replace(/\/$/, ""),
+    baseUrl: apiBaseUrl(),
     token: apiToken,
   };
+}
+
+export function apiBaseUrl(): string {
+  return (process.env.MTASKS_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
 }
 
 export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
+  return (await apiRequestWithHeaders<T>(path, options)).data;
+}
+
+// Same as apiRequest, plus the response headers (for cursors such as
+// X-Next-Before-Id on the activity feeds).
+export async function apiRequestWithHeaders<T>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<{ data: T; headers: Headers }> {
   const { baseUrl, token } = getConfig();
-  const { method = "GET", body, form, params } = options;
+  const { method = "GET", body, params } = options;
 
   const url = new URL(`${baseUrl}${path}`);
   if (params) {
@@ -42,17 +52,14 @@ export async function apiRequest<T>(
     }
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/json",
-  };
-  // For multipart, fetch sets Content-Type itself so it can include the boundary.
-  if (!form) headers["Content-Type"] = "application/json";
-
   const response = await fetch(url.toString(), {
     method,
-    headers,
-    body: form ?? (body ? JSON.stringify(body) : undefined),
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
@@ -70,12 +77,9 @@ export async function apiRequest<T>(
 
   // Some endpoints (e.g. a 204 No Content on DELETE) return an empty body.
   // Guard against JSON.parse throwing "Unexpected end of JSON input".
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  const text = await response.text();
-  if (!text) {
-    return undefined as T;
-  }
-  return JSON.parse(text) as T;
+  const text = response.status === 204 ? "" : await response.text();
+  return {
+    data: (text ? JSON.parse(text) : undefined) as T,
+    headers: response.headers,
+  };
 }
