@@ -4,7 +4,7 @@
   "description": "MCP server for Just Another Issue Tracker",
   "type": "module",
   "bin": {
-    "jait": "./dist/index.js"
+    "jait": "dist/index.js"
   },
   "files": [
     "dist"
