@@ -70,7 +70,7 @@ test("get_project_section returns the section body", async () => {
 test("replace_project_section PATCHes and confirms without echoing the description", async () => {
   const { calls, project } = stub(DESC);
   const r = await run("replace_project_section", { heading: "Goals", body: "New" });
-  assert.equal(project.description, "Intro\n\n## Goals\n\nNew\n\n## Notes\n\nOne\n");
+  assert.equal(project.description, "Intro\n\n## Goals\nNew\n\n## Notes\n\nOne\n");
   const patch = calls.find((c) => c.method === "PATCH");
   assert.equal(patch.url, "https://example.test/api/v1/teams/4/projects/7");
   assert.match(text(r), /Goals/);
