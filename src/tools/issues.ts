@@ -390,7 +390,7 @@ export function registerIssueTools(server: McpServer) {
 
   server.tool(
     "get_issue",
-    "Get full details of a specific issue",
+    "Get full details of a specific issue. For a long description, use list_issue_sections and get_issue_section to read just part of it.",
     {
       team_id: z.number().describe("Team ID"),
       issue_id: z.number().describe("Issue ID"),
@@ -533,12 +533,17 @@ export function registerIssueTools(server: McpServer) {
 
   server.tool(
     "update_issue",
-    "Update an existing issue (change priority, reassign, move lane, etc.)",
+    "Update an existing issue (change priority, reassign, move lane, etc.). For partial description edits prefer edit_issue_description (small edits), replace_issue_section (rewriting a section) or append_to_issue_section (adding text).",
     {
       team_id: z.number().describe("Team ID"),
       issue_id: z.number().describe("Issue ID"),
       title: z.string().optional().describe("New title"),
-      description: z.string().optional().describe("New description"),
+      description: z
+        .string()
+        .optional()
+        .describe(
+          "New description. Use only for a full rewrite or when seeding a new description; for partial edits use edit_issue_description, replace_issue_section or append_to_issue_section"
+        ),
       priority: priorityEnum.optional(),
       lane_id: z.number().optional().describe("Move to lane ID"),
       assignee_id: z.number().optional().describe("Reassign to user ID"),

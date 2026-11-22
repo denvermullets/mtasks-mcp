@@ -154,7 +154,7 @@ export function registerProjectTools(server: McpServer) {
 
   server.tool(
     "get_project",
-    "Get full details of a specific project",
+    "Get full details of a specific project. For a long description, use list_project_sections and get_project_section to read just part of it.",
     {
       team_id: z.number().describe("Team ID"),
       project_id: z.number().describe("Project ID"),
@@ -234,12 +234,17 @@ export function registerProjectTools(server: McpServer) {
 
   server.tool(
     "update_project",
-    "Update an existing project (change status, priority, lead, dates, etc.)",
+    "Update an existing project (change status, priority, lead, dates, etc.). For partial description edits prefer edit_project_description (small edits), replace_project_section (rewriting a section) or append_to_project_section (adding text).",
     {
       team_id: z.number().describe("Team ID"),
       project_id: z.number().describe("Project ID"),
       name: z.string().optional().describe("New name"),
-      description: z.string().optional().describe("New description"),
+      description: z
+        .string()
+        .optional()
+        .describe(
+          "New description. Use only for a full rewrite or when seeding a new description; for partial edits use edit_project_description, replace_project_section or append_to_project_section"
+        ),
       status: projectStatusEnum.optional(),
       priority: priorityEnum.optional(),
       lead_id: z.number().optional().describe("New lead user ID"),
