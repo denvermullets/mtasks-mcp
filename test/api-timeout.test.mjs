@@ -75,3 +75,40 @@ test("non-abort fetch errors pass through unchanged", async () => {
   };
   await assert.rejects(apiRequest("/api/v1/x"), /fetch failed/);
 });
+
+test("a stalled response body times out with the descriptive error", async () => {
+  setup("50");
+  globalThis.fetch = async (_u, init) => {
+    const body = new ReadableStream({
+      start(controller) {
+        init.signal.addEventListener("abort", () => {
+          const err = new Error("This operation was aborted");
+          err.name = "AbortError";
+          controller.error(err);
+        });
+      },
+    });
+    return new Response(body, { status: 200 });
+  };
+  await assert.rejects(apiRequest("/api/v1/stall"), (err) => {
+    assert.equal(err.message, "Request to /api/v1/stall timed out after 50ms");
+    return true;
+  });
+});
+
+test("a stalled error-response body also times out", async () => {
+  setup("50");
+  globalThis.fetch = async (_u, init) => {
+    const body = new ReadableStream({
+      start(controller) {
+        init.signal.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "AbortError";
+          controller.error(err);
+        });
+      },
+    });
+    return new Response(body, { status: 500 });
+  };
+  await assert.rejects(apiRequest("/api/v1/stall"), /timed out after 50ms/);
+});

@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   AmbiguousMatch,
   DuplicateHeading,
+  EmptyOldString,
+  SectionError,
   SectionNotFound,
   TextNotFound,
   appendToSection,
@@ -235,5 +237,35 @@ test("replaceText replaceAll replaces every match", () => {
 });
 
 test("replaceText rejects an empty oldString", () => {
-  assert.throws(() => replaceText("abc", { oldString: "", newString: "x" }), /empty/);
+  assert.throws(
+    () => replaceText("abc", { oldString: "", newString: "x" }),
+    (err) => err instanceof EmptyOldString && /empty/.test(err.message)
+  );
+});
+
+test("all splicer errors share the SectionError base class", () => {
+  const errs = [
+    () => getSection("## A\n", { heading: "B" }),
+    () => getSection("## A\n## A\n", { heading: "A" }),
+    () => replaceText("a", { oldString: "z", newString: "" }),
+    () => replaceText("aa", { oldString: "a", newString: "" }),
+    () => replaceText("a", { oldString: "", newString: "" }),
+  ];
+  for (const fn of errs) {
+    assert.throws(fn, (err) => err instanceof SectionError && err instanceof Error);
+  }
+  assert.ok(new SectionNotFound("x", []) instanceof SectionError);
+  assert.ok(new DuplicateHeading("x", 2) instanceof SectionError);
+  assert.ok(new TextNotFound() instanceof SectionError);
+  assert.ok(new AmbiguousMatch(2) instanceof SectionError);
+});
+
+test("optional closing # sequence is stripped from headings", () => {
+  const doc = "## Goals ##\nA\n\n### Sub ###   \nB\n\n## C#\nC\n";
+  assert.deepEqual(listSections(doc), [
+    { heading: "Goals", level: 2 },
+    { heading: "Sub", level: 3 },
+    { heading: "C#", level: 2 },
+  ]);
+  assert.equal(getSection(doc, { heading: "Goals" }), "A\n\n### Sub ###   \nB\n\n");
 });

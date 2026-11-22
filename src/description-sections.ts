@@ -6,7 +6,15 @@ export interface SectionInfo {
   level: number;
 }
 
-export class SectionNotFound extends Error {
+/** Base class for every expected splicing failure (bad heading, bad match). */
+export class SectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SectionError";
+  }
+}
+
+export class SectionNotFound extends SectionError {
   constructor(heading: string, available: string[]) {
     super(
       `Section "${heading}" not found. Available headings: ${
@@ -17,7 +25,7 @@ export class SectionNotFound extends Error {
   }
 }
 
-export class DuplicateHeading extends Error {
+export class DuplicateHeading extends SectionError {
   constructor(heading: string, count: number) {
     super(
       `Heading "${heading}" is ambiguous: it appears ${count} times in the description`
@@ -26,19 +34,26 @@ export class DuplicateHeading extends Error {
   }
 }
 
-export class TextNotFound extends Error {
+export class TextNotFound extends SectionError {
   constructor() {
     super("Text not found: found 0 matches for oldString");
     this.name = "TextNotFound";
   }
 }
 
-export class AmbiguousMatch extends Error {
+export class AmbiguousMatch extends SectionError {
   constructor(count: number) {
     super(
       `Ambiguous match: found ${count} matches for oldString; add surrounding context to make it unique or pass replaceAll`
     );
     this.name = "AmbiguousMatch";
+  }
+}
+
+export class EmptyOldString extends SectionError {
+  constructor() {
+    super("oldString must not be empty");
+    this.name = "EmptyOldString";
   }
 }
 
@@ -86,7 +101,11 @@ function parse(description: string): Parsed {
     }
     const h = HEADING_RE.exec(line.text);
     if (!h) return;
-    const heading = h[2].trim();
+    // CommonMark: an optional closing sequence of #s (preceded by whitespace)
+    // is not part of the heading text.
+    const heading = h[2]
+      .replace(/(?:^|\s+)#+\s*$/, "")
+      .trim();
     if (heading) headings.push({ index, heading, level: h[1].length });
   });
   return { lines, headings };
@@ -193,7 +212,7 @@ export function replaceText(
     replaceAll = false,
   }: { oldString: string; newString: string; replaceAll?: boolean }
 ): string {
-  if (oldString === "") throw new Error("oldString must not be empty");
+  if (oldString === "") throw new EmptyOldString();
   const parts = description.split(oldString);
   const count = parts.length - 1;
   if (count === 0) throw new TextNotFound();

@@ -62,9 +62,10 @@ export async function apiRequestWithHeaders<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  let response: Response;
+  // The timer stays armed through the body read (a server can send headers
+  // and then stall) and is cleared only once the body is consumed.
   try {
-    response = await fetch(url.toString(), {
+    const response = await fetch(url.toString(), {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -74,6 +75,30 @@ export async function apiRequestWithHeaders<T>(
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      let message: string;
+      try {
+        const parsed = JSON.parse(errorBody);
+        message =
+          parsed.message ||
+          parsed.errors?.join(", ") ||
+          parsed.error ||
+          errorBody;
+      } catch {
+        message = errorBody;
+      }
+      throw new Error(`API error ${response.status}: ${message}`);
+    }
+
+    // Some endpoints (e.g. a 204 No Content on DELETE) return an empty body.
+    // Guard against JSON.parse throwing "Unexpected end of JSON input".
+    const text = response.status === 204 ? "" : await response.text();
+    return {
+      data: (text ? JSON.parse(text) : undefined) as T,
+      headers: response.headers,
+    };
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(`Request to ${path} timed out after ${timeoutMs}ms`);
@@ -82,25 +107,4 @@ export async function apiRequestWithHeaders<T>(
   } finally {
     clearTimeout(timer);
   }
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    let message: string;
-    try {
-      const parsed = JSON.parse(errorBody);
-      message =
-        parsed.message || parsed.errors?.join(", ") || parsed.error || errorBody;
-    } catch {
-      message = errorBody;
-    }
-    throw new Error(`API error ${response.status}: ${message}`);
-  }
-
-  // Some endpoints (e.g. a 204 No Content on DELETE) return an empty body.
-  // Guard against JSON.parse throwing "Unexpected end of JSON input".
-  const text = response.status === 204 ? "" : await response.text();
-  return {
-    data: (text ? JSON.parse(text) : undefined) as T,
-    headers: response.headers,
-  };
 }
