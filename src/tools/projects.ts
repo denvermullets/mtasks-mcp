@@ -8,6 +8,17 @@ import {
   formatAttachments,
   uploadLocalFiles,
 } from "../attachments.js";
+import {
+  AmbiguousMatch,
+  DuplicateHeading,
+  SectionNotFound,
+  TextNotFound,
+  appendToSection,
+  getSection,
+  listSections,
+  replaceSection,
+  replaceText,
+} from "../description-sections.js";
 import { type ActivityEntry, formatActivityPage } from "./issues.js";
 
 const projectStatusEnum = z
@@ -66,6 +77,64 @@ function formatProject(project: Project, detailed = false): string {
   }
   return lines.join("\n");
 }
+
+type ToolResult = {
+  content: { type: "text"; text: string }[];
+  isError?: boolean;
+};
+
+const textResult = (text: string): ToolResult => ({
+  content: [{ type: "text", text }],
+});
+
+// Splicer errors are expected user-facing failures: show their message to the
+// agent as an error result. Anything else (network, auth) propagates.
+async function sectionOp(fn: () => Promise<string>): Promise<ToolResult> {
+  try {
+    return textResult(await fn());
+  } catch (err) {
+    if (
+      err instanceof SectionNotFound ||
+      err instanceof DuplicateHeading ||
+      err instanceof TextNotFound ||
+      err instanceof AmbiguousMatch
+    ) {
+      return { ...textResult(err.message), isError: true };
+    }
+    throw err;
+  }
+}
+
+async function fetchDescription(
+  team_id: number,
+  project_id: number
+): Promise<string> {
+  const project = await apiRequest<Project>(
+    `/api/v1/teams/${team_id}/projects/${project_id}`
+  );
+  return project.description ?? "";
+}
+
+async function saveDescription(
+  team_id: number,
+  project_id: number,
+  description: string
+): Promise<void> {
+  await apiRequest<Project>(`/api/v1/teams/${team_id}/projects/${project_id}`, {
+    method: "PATCH",
+    body: { project: { description } },
+  });
+}
+
+const sectionIds = {
+  team_id: z.number().describe("Team ID"),
+  project_id: z.number().describe("Project ID"),
+};
+const headingArg = z
+  .string()
+  .describe('Exact heading text without the leading #s, e.g. "Goals"');
+const INSTEAD =
+  " Use this instead of update_project for partial description edits.";
 
 export function registerProjectTools(server: McpServer) {
   server.tool(
@@ -330,5 +399,95 @@ export function registerProjectTools(server: McpServer) {
         ],
       };
     }
+  );
+  server.tool(
+    "list_project_sections",
+    "List the headings (with levels) in a project's description. Start here to see what sections exist before reading or editing one.",
+    sectionIds,
+    async ({ team_id, project_id }) =>
+      sectionOp(async () => {
+        const sections = listSections(
+          await fetchDescription(team_id, project_id)
+        );
+        if (sections.length === 0) return "No sections found.";
+        return sections
+          .map((s) => `${"#".repeat(s.level)} ${s.heading}`)
+          .join("\n");
+      })
+  );
+
+  server.tool(
+    "get_project_section",
+    "Read the text of one section of a project's description (subsections included) without loading the whole description.",
+    { ...sectionIds, heading: headingArg },
+    async ({ team_id, project_id, heading }) =>
+      sectionOp(async () =>
+        getSection(await fetchDescription(team_id, project_id), { heading })
+      )
+  );
+
+  server.tool(
+    "replace_project_section",
+    "Replace the body of one section of a project's description, keeping its heading. Pick this when rewriting most of a section; for adding to the end use append_to_project_section, for small tweaks use edit_project_description." +
+      INSTEAD,
+    {
+      ...sectionIds,
+      heading: headingArg,
+      body: z.string().describe("New section body (heading not included)"),
+    },
+    async ({ team_id, project_id, heading, body }) =>
+      sectionOp(async () => {
+        const next = replaceSection(
+          await fetchDescription(team_id, project_id),
+          { heading, body }
+        );
+        await saveDescription(team_id, project_id, next);
+        return `Replaced section "${heading}" in project ${project_id}.`;
+      })
+  );
+
+  server.tool(
+    "append_to_project_section",
+    "Add text to the end of one section of a project's description. Pick this when adding to a section without touching what is there; to rewrite it use replace_project_section." +
+      INSTEAD,
+    {
+      ...sectionIds,
+      heading: headingArg,
+      text: z.string().describe("Text to append"),
+    },
+    async ({ team_id, project_id, heading, text }) =>
+      sectionOp(async () => {
+        const next = appendToSection(
+          await fetchDescription(team_id, project_id),
+          { heading, text }
+        );
+        await saveDescription(team_id, project_id, next);
+        return `Appended to section "${heading}" in project ${project_id}.`;
+      })
+  );
+
+  server.tool(
+    "edit_project_description",
+    "Find-and-replace literal text in a project's description. Pick this for small edits inside a section (a word, a line, a checkbox); fails if old_string matches more than once unless replace_all is true." +
+      INSTEAD,
+    {
+      ...sectionIds,
+      old_string: z.string().describe("Exact text to find"),
+      new_string: z.string().describe("Replacement text"),
+      replace_all: z
+        .boolean()
+        .optional()
+        .describe("Replace every match instead of requiring exactly one"),
+    },
+    async ({ team_id, project_id, old_string, new_string, replace_all }) =>
+      sectionOp(async () => {
+        const next = replaceText(await fetchDescription(team_id, project_id), {
+          oldString: old_string,
+          newString: new_string,
+          replaceAll: replace_all,
+        });
+        await saveDescription(team_id, project_id, next);
+        return `Edited description of project ${project_id}.`;
+      })
   );
 }
