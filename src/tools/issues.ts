@@ -8,17 +8,7 @@ import {
   formatAttachments,
   uploadLocalFiles,
 } from "../attachments.js";
-import {
-  AmbiguousMatch,
-  DuplicateHeading,
-  SectionNotFound,
-  TextNotFound,
-  appendToSection,
-  getSection,
-  listSections,
-  replaceSection,
-  replaceText,
-} from "../description-sections.js";
+import { registerDescriptionSectionTools } from "./description-section-tools.js";
 
 const priorityEnum = z
   .enum(["urgent", "high", "medium", "low", "no_priority"])
@@ -198,152 +188,18 @@ export function formatActivityPage(
   return lines.join("\n");
 }
 
-const splicerErrors = [
-  SectionNotFound,
-  DuplicateHeading,
-  TextNotFound,
-  AmbiguousMatch,
-];
-
-function textResult(text: string) {
-  return { content: [{ type: "text" as const, text }] };
-}
-
-// Splicer failures become readable text; anything else (API, network) propagates.
-function sectionErrorResult(err: unknown) {
-  if (err instanceof Error && splicerErrors.some((c) => err instanceof c)) {
-    return textResult(`Error: ${err.message}`);
-  }
-  if (err instanceof Error && err.message === "oldString must not be empty") {
-    return textResult(`Error: ${err.message}`);
-  }
-  throw err;
-}
-
-async function fetchDescription(team_id: number, issue_id: number) {
-  const issue = await apiRequest<Issue>(
-    `/api/v1/teams/${team_id}/issues/${issue_id}`
-  );
-  return issue.description ?? "";
-}
-
-// Fetch, splice, PATCH. Returns a short confirmation, never the description.
-async function editDescription(
-  team_id: number,
-  issue_id: number,
-  splice: (description: string) => string,
-  confirmation: (identifier: string) => string
-) {
-  try {
-    const updated = splice(await fetchDescription(team_id, issue_id));
-    const issue = await apiRequest<Issue>(
-      `/api/v1/teams/${team_id}/issues/${issue_id}`,
-      { method: "PATCH", body: { issue: { description: updated } } }
-    );
-    return textResult(confirmation(issue.identifier));
-  } catch (err) {
-    return sectionErrorResult(err);
-  }
-}
-
-const SECTION_NOTE =
-  "Use this instead of update_issue when changing only part of an issue description.";
-
 export function registerIssueTools(server: McpServer) {
-  server.tool(
-    "list_issue_sections",
-    "List the markdown headings (with levels) in an issue description. Use this first to see which sections exist before reading or editing one.",
-    {
+  registerDescriptionSectionTools<Issue>(server, {
+    noun: "issue",
+    idShape: {
       team_id: z.number().describe("Team ID"),
       issue_id: z.number().describe("Issue ID"),
     },
-    async ({ team_id, issue_id }) => {
-      const sections = listSections(await fetchDescription(team_id, issue_id));
-      return textResult(
-        sections.length
-          ? sections.map((s) => `${"  ".repeat(s.level - 2)}${s.heading} (h${s.level})`).join("\n")
-          : "No sections found."
-      );
-    }
-  );
-
-  server.tool(
-    "get_issue_section",
-    "Read one section of an issue description (heading excluded, subsections included). Use this instead of get_issue when you only need one section.",
-    {
-      team_id: z.number().describe("Team ID"),
-      issue_id: z.number().describe("Issue ID"),
-      heading: z.string().describe("Heading text of the section, without the # marks"),
-    },
-    async ({ team_id, issue_id, heading }) => {
-      try {
-        const body = getSection(await fetchDescription(team_id, issue_id), { heading });
-        return textResult(body || "(empty section)");
-      } catch (err) {
-        return sectionErrorResult(err);
-      }
-    }
-  );
-
-  server.tool(
-    "replace_issue_section",
-    `Replace the body of one section of an issue description (heading is kept). Use when rewriting most of a section; to add to the end use append_to_issue_section, for small tweaks use edit_issue_description. ${SECTION_NOTE}`,
-    {
-      team_id: z.number().describe("Team ID"),
-      issue_id: z.number().describe("Issue ID"),
-      heading: z.string().describe("Heading text of the section, without the # marks"),
-      body: z.string().describe("New section body in markdown"),
-    },
-    async ({ team_id, issue_id, heading, body }) =>
-      editDescription(
-        team_id,
-        issue_id,
-        (d) => replaceSection(d, { heading, body }),
-        (id) => `Replaced section "${heading}" in ${id}.`
-      )
-  );
-
-  server.tool(
-    "append_to_issue_section",
-    `Append text to the end of one section of an issue description. Use when adding to a section without touching what is there. ${SECTION_NOTE}`,
-    {
-      team_id: z.number().describe("Team ID"),
-      issue_id: z.number().describe("Issue ID"),
-      heading: z.string().describe("Heading text of the section, without the # marks"),
-      text: z.string().describe("Markdown text to append"),
-    },
-    async ({ team_id, issue_id, heading, text }) =>
-      editDescription(
-        team_id,
-        issue_id,
-        (d) => appendToSection(d, { heading, text }),
-        (id) => `Appended to section "${heading}" in ${id}.`
-      )
-  );
-
-  server.tool(
-    "edit_issue_description",
-    `Find-and-replace literal text in an issue description. Use for small edits inside a section; fails if old_string is not found or matches more than once (unless replace_all). ${SECTION_NOTE}`,
-    {
-      team_id: z.number().describe("Team ID"),
-      issue_id: z.number().describe("Issue ID"),
-      old_string: z.string().describe("Exact text to find"),
-      new_string: z.string().describe("Replacement text"),
-      replace_all: z.boolean().optional().describe("Replace every match instead of requiring a unique one"),
-    },
-    async ({ team_id, issue_id, old_string, new_string, replace_all }) =>
-      editDescription(
-        team_id,
-        issue_id,
-        (d) =>
-          replaceText(d, {
-            oldString: old_string,
-            newString: new_string,
-            replaceAll: replace_all,
-          }),
-        (id) => `Edited description of ${id}.`
-      )
-  );
+    path: ({ team_id, issue_id }) =>
+      `/api/v1/teams/${team_id}/issues/${issue_id}`,
+    bodyKey: "issue",
+    label: (issue) => issue.identifier,
+  });
 
   server.tool(
     "list_issues",

@@ -53,13 +53,30 @@ test("registers the five section tools", () => {
 test("list_project_sections shows headings with levels", async () => {
   stub(DESC);
   const r = await run("list_project_sections", {});
-  assert.match(text(r), /## Goals/);
-  assert.match(text(r), /## Notes/);
+  assert.equal(text(r), "## Goals\n## Notes");
 });
 
 test("list_project_sections handles empty description", async () => {
   stub(null);
   assert.match(text(await run("list_project_sections", {})), /No sections/);
+});
+
+test("get_project_section reports an empty section as (empty section)", async () => {
+  stub("## A\n## B\nx\n");
+  assert.equal(text(await run("get_project_section", { heading: "A" })), "(empty section)");
+});
+
+test("empty old_string is an isError result and does not save", async () => {
+  const { calls } = stub(DESC);
+  const r = await run("edit_project_description", { old_string: "", new_string: "x" });
+  assert.equal(r.isError, true);
+  assert.equal(text(r), "oldString must not be empty");
+  assert.ok(!calls.some((c) => c.method === "PATCH"));
+});
+
+test("non-splicer errors still throw", async () => {
+  globalThis.fetch = async () => new Response("boom", { status: 500 });
+  await assert.rejects(run("get_project_section", { heading: "A" }), /API error 500/);
 });
 
 test("get_project_section returns the section body", async () => {
@@ -73,8 +90,7 @@ test("replace_project_section PATCHes and confirms without echoing the descripti
   assert.equal(project.description, "Intro\n\n## Goals\nNew\n\n## Notes\n\nOne\n");
   const patch = calls.find((c) => c.method === "PATCH");
   assert.equal(patch.url, "https://example.test/api/v1/teams/4/projects/7");
-  assert.match(text(r), /Goals/);
-  assert.doesNotMatch(text(r), /Intro|One/);
+  assert.equal(text(r), 'Replaced section "Goals" in project "P".');
   assert.notEqual(r.isError, true);
 });
 
@@ -82,7 +98,7 @@ test("append_to_project_section appends and saves", async () => {
   const { project } = stub(DESC);
   const r = await run("append_to_project_section", { heading: "Notes", text: "Two" });
   assert.match(project.description, /One\nTwo\n$/);
-  assert.match(text(r), /Notes/);
+  assert.equal(text(r), 'Appended to section "Notes" in project "P".');
 });
 
 test("edit_project_description replaces text, with replace_all", async () => {
