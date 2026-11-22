@@ -1,6 +1,7 @@
 import { readToken } from "./config-store.js";
 
 const DEFAULT_API_URL = "https://justanotherissuetracker.com";
+const DEFAULT_TIMEOUT_MS = 30000;
 
 interface RequestOptions {
   method?: string;
@@ -25,6 +26,11 @@ function getConfig() {
 
 export function apiBaseUrl(): string {
   return (process.env.MTASKS_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
+}
+
+function apiTimeoutMs(): number {
+  const parsed = Number(process.env.MTASKS_API_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
 }
 
 export async function apiRequest<T>(
@@ -52,15 +58,30 @@ export async function apiRequestWithHeaders<T>(
     }
   }
 
-  const response = await fetch(url.toString(), {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const timeoutMs = apiTimeoutMs();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request to ${path} timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     const errorBody = await response.text();
